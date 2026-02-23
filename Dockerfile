@@ -1,23 +1,22 @@
-# مرحلة البناء
-FROM node:18-alpine AS build
+# Build Stage
+FROM node:20 AS build
 
 WORKDIR /app
 
 COPY package*.json ./
+
 RUN npm install
 
 COPY . .
+
 RUN npm run build
 
-# مرحلة التشغيل
-FROM node:18-alpine
 
-WORKDIR /usr/src/app
+# Production Stage
+FROM nginx:alpine
 
-RUN npm install -g sirv-cli
-
-COPY --from=build /app/dist ./dist
+COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
 
-CMD ["sirv", "dist", "--port", "80", "--host", "0.0.0.0", "--single"]
+CMD ["nginx", "-g", "daemon off;"]
