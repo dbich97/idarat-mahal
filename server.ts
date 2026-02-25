@@ -76,26 +76,63 @@ const authenticateToken = (req: any, res: any, next: any) => {
 
 // Auth Routes
 app.post("/api/register", async (req, res) => {
-  console.log("Register request received:", req.body.username);
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: "Username and password are required" });
-  }
-  const hashedPassword = await bcrypt.hash(password, 10);
   try {
+    let { username, password } = req.body;
+    
+    // 1. Sanitization & Validation
+    username = username?.toString().trim();
+    password = password?.toString();
+
+    if (!username || !password) {
+      return res.status(400).json({ error: "اسم المستخدم وكلمة المرور مطلوبان" });
+    }
+
+    if (username.length < 3) {
+      return res.status(400).json({ error: "اسم المستخدم يجب أن يكون 3 أحرف على الأقل" });
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return res.status(400).json({ error: "اسم المستخدم يجب أن يحتوي على أحرف وأرقام فقط" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // 2. Database Operation
     const info = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hashedPassword);
-    console.log("User registered successfully:", username);
-    res.status(201).json({ id: info.lastInsertRowid });
+    
+    console.log(`User registered successfully: ${username} (ID: ${info.lastInsertRowid})`);
+    return res.status(201).json({ 
+      success: true, 
+      message: "تم التسجيل بنجاح",
+      id: info.lastInsertRowid 
+    });
+
   } catch (e: any) {
-    console.error("Registration error:", e.message);
-    res.status(400).json({ error: "Username already exists" });
+    console.error("Registration error details:", e);
+    
+    if (e.message && e.message.includes("UNIQUE constraint failed")) {
+      return res.status(400).json({ error: "اسم المستخدم هذا محجوز بالفعل، اختر اسماً آخر" });
+    }
+    
+    return res.status(500).json({ 
+      error: "حدث خطأ داخلي أثناء معالجة طلبك. يرجى المحاولة لاحقاً." 
+    });
   }
 });
 
 app.post("/api/login", async (req, res) => {
-  console.log("Login request received:", req.body.username);
-  const { username, password } = req.body;
   try {
+    console.log("Login request received:", req.body.username);
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: "اسم المستخدم وكلمة المرور مطلوبان" });
+    }
+
     const user: any = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
     if (user && await bcrypt.compare(password, user.password)) {
       const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
@@ -103,11 +140,11 @@ app.post("/api/login", async (req, res) => {
       res.json({ token, username: user.username });
     } else {
       console.log("Login failed: Invalid credentials for", username);
-      res.status(401).json({ error: "Invalid credentials" });
+      res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
   } catch (e: any) {
     console.error("Login error:", e.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "حدث خطأ في الخادم أثناء تسجيل الدخول" });
   }
 });
 

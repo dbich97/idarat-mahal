@@ -91,19 +91,25 @@ const Login = ({ setToken }: { setToken: (t: string) => void }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isRegister, setIsRegister] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
+    
     const endpoint = isRegister ? '/api/register' : '/api/login';
     try {
       const res = await axios.post(endpoint, { username, password });
       const data = res.data;
+      
       if (res.status === 200 || res.status === 201) {
         if (isRegister) {
           setIsRegister(false);
-          setError('تم التسجيل بنجاح، يمكنك الآن الدخول');
+          setUsername(username.trim()); // Keep username for login
+          setPassword(''); // Clear password for security
+          setError('تم التسجيل بنجاح! يمكنك الآن تسجيل الدخول باستخدام بياناتك.');
         } else {
           setToken(data.token);
           setAuthToken(data.token);
@@ -112,11 +118,15 @@ const Login = ({ setToken }: { setToken: (t: string) => void }) => {
       }
     } catch (err: any) {
       console.error('Auth error:', err);
-      if (err.response) {
-        setError(err.response.data.error || 'حدث خطأ ما');
+      if (err.response && err.response.data) {
+        setError(err.response.data.error || 'حدث خطأ غير متوقع في الخادم');
+      } else if (err.request) {
+        setError('تعذر الوصول إلى الخادم. يرجى التحقق من اتصالك بالإنترنت.');
       } else {
-        setError('فشل الاتصال بالخادم. يرجى التأكد من تشغيل الخادم والمحاولة مرة أخرى.');
+        setError('حدث خطأ أثناء إعداد الطلب. يرجى المحاولة مرة أخرى.');
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -165,9 +175,21 @@ const Login = ({ setToken }: { setToken: (t: string) => void }) => {
           )}
           <button 
             type="submit"
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+            disabled={isLoading}
+            className={`w-full py-3 rounded-xl font-bold text-white transition-all shadow-lg ${
+              isLoading 
+                ? 'bg-slate-400 cursor-not-allowed' 
+                : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95'
+            }`}
           >
-            {isRegister ? 'تسجيل' : 'دخول'}
+            {isLoading ? (
+              <span className="flex items-center justify-center">
+                <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full ml-2"></span>
+                جاري المعالجة...
+              </span>
+            ) : (
+              isRegister ? 'تسجيل' : 'دخول'
+            )}
           </button>
         </form>
 

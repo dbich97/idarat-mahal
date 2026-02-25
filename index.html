@@ -4,6 +4,51 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Google AI Studio App</title>
+    <script>
+      // Fix for "Uncaught TypeError: Cannot set property fetch of #<Window> which has only a getter"
+      // This happens when a polyfill tries to overwrite window.fetch in a restricted environment.
+      (function() {
+        // 1. Ensure FormData looks "modern" to prevent formdata-polyfill from trying to patch fetch
+        try {
+          if (typeof FormData === 'undefined') {
+            window.FormData = function FormData() {};
+          }
+          if (FormData.prototype && !FormData.prototype.keys) {
+            FormData.prototype.keys = function() { return []; };
+            FormData.prototype.values = function() { return []; };
+            FormData.prototype.entries = function() { return []; };
+            if (typeof Symbol !== 'undefined' && Symbol.iterator) {
+              FormData.prototype[Symbol.iterator] = function() { return [].entries(); };
+            }
+          }
+        } catch (e) {
+          console.error('FormData patch error:', e);
+        }
+
+        // 2. Try to define a dummy setter for window.fetch to prevent the TypeError on assignment
+        try {
+          var descriptor = Object.getOwnPropertyDescriptor(window, 'fetch');
+          if (descriptor && !descriptor.set) {
+            if (descriptor.configurable) {
+              var _fetch = window.fetch;
+              Object.defineProperty(window, 'fetch', {
+                get: function() { return _fetch; },
+                set: function(v) { 
+                  console.warn('Prevented fetch overwrite, but allowed assignment to avoid TypeError');
+                },
+                configurable: true,
+                enumerable: true
+              });
+            } else {
+              // If not configurable, we can't do much via defineProperty.
+              // But we've tried to satisfy the polyfills above.
+            }
+          }
+        } catch (e) {
+          console.error('Fetch patch error:', e);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
