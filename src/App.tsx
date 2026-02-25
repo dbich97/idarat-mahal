@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { 
   BrowserRouter as Router, 
   Routes, 
@@ -97,13 +98,9 @@ const Login = ({ setToken }: { setToken: (t: string) => void }) => {
     setError('');
     const endpoint = isRegister ? '/api/register' : '/api/login';
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const res = await axios.post(endpoint, { username, password });
+      const data = res.data;
+      if (res.status === 200 || res.status === 201) {
         if (isRegister) {
           setIsRegister(false);
           setError('تم التسجيل بنجاح، يمكنك الآن الدخول');
@@ -112,11 +109,14 @@ const Login = ({ setToken }: { setToken: (t: string) => void }) => {
           setAuthToken(data.token);
           navigate('/');
         }
-      } else {
-        setError(data.error || 'حدث خطأ ما');
       }
-    } catch (err) {
-      setError('فشل الاتصال بالخادم');
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      if (err.response) {
+        setError(err.response.data.error || 'حدث خطأ ما');
+      } else {
+        setError('فشل الاتصال بالخادم. يرجى التأكد من تشغيل الخادم والمحاولة مرة أخرى.');
+      }
     }
   };
 
@@ -189,17 +189,21 @@ const Dashboard = () => {
   const [sales, setSales] = useState<Sale[]>([]);
 
   useEffect(() => {
-    fetchData();
+    loadDashboardData();
   }, []);
 
-  const fetchData = async () => {
+  const loadDashboardData = async () => {
     const token = getAuthToken();
-    const [prodRes, salesRes] = await Promise.all([
-      fetch('/api/products', { headers: { 'Authorization': `Bearer ${token}` } }),
-      fetch('/api/sales', { headers: { 'Authorization': `Bearer ${token}` } })
-    ]);
-    if (prodRes.ok) setProducts(await prodRes.json());
-    if (salesRes.ok) setSales(await salesRes.json());
+    try {
+      const [prodRes, salesRes] = await Promise.all([
+        axios.get('/api/products', { headers: { 'Authorization': `Bearer ${token}` } }),
+        axios.get('/api/sales', { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+      setProducts(prodRes.data);
+      setSales(salesRes.data);
+    } catch (err) {
+      console.error('Dashboard data error:', err);
+    }
   };
 
   const totalSales = sales.reduce((acc, sale) => acc + sale.total_price, 0);
@@ -300,43 +304,49 @@ const Inventory = () => {
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
-    fetchProducts();
+    loadInventoryData();
   }, []);
 
-  const fetchProducts = async () => {
-    const res = await fetch('/api/products', {
-      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-    });
-    if (res.ok) setProducts(await res.json());
+  const loadInventoryData = async () => {
+    try {
+      const res = await axios.get('/api/products', {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      setProducts(res.data);
+    } catch (err) {
+      console.error('Inventory data error:', err);
+    }
   };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/products', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getAuthToken()}`
-      },
-      body: JSON.stringify({ 
+    try {
+      const res = await axios.post('/api/products', { 
         name, 
         purchase_price: parseFloat(purchasePrice), 
         quantity: parseInt(quantity),
         purchase_date: purchaseDate
-      }),
-    });
-    if (res.ok) {
-      setName(''); setPurchasePrice(''); setQuantity('');
-      fetchProducts();
+      }, {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      if (res.status === 201) {
+        setName(''); setPurchasePrice(''); setQuantity('');
+        loadInventoryData();
+      }
+    } catch (err) {
+      console.error('Add product error:', err);
     }
   };
 
   const handleDelete = async (id: number) => {
-    const res = await fetch(`/api/products/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-    });
-    if (res.ok) fetchProducts();
+    try {
+      const res = await axios.delete(`/api/products/${id}`, {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      if (res.status === 204) loadInventoryData();
+    } catch (err) {
+      console.error('Delete product error:', err);
+    }
   };
 
   return (
@@ -469,41 +479,46 @@ const Sales = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchData();
+    loadSalesData();
   }, []);
 
-  const fetchData = async () => {
+  const loadSalesData = async () => {
     const token = getAuthToken();
-    const [prodRes, salesRes] = await Promise.all([
-      fetch('/api/products', { headers: { 'Authorization': `Bearer ${token}` } }),
-      fetch('/api/sales', { headers: { 'Authorization': `Bearer ${token}` } })
-    ]);
-    if (prodRes.ok) setProducts(await prodRes.json());
-    if (salesRes.ok) setSales(await salesRes.json());
+    try {
+      const [prodRes, salesRes] = await Promise.all([
+        axios.get('/api/products', { headers: { 'Authorization': `Bearer ${token}` } }),
+        axios.get('/api/sales', { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+      setProducts(prodRes.data);
+      setSales(salesRes.data);
+    } catch (err) {
+      console.error('Sales data error:', err);
+    }
   };
 
   const handleSale = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const res = await fetch('/api/sales', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getAuthToken()}`
-      },
-      body: JSON.stringify({ 
+    try {
+      const res = await axios.post('/api/sales', { 
         product_id: parseInt(selectedProduct), 
         quantity: parseInt(quantity),
         sale_price: parseFloat(salePrice),
         sale_date: saleDate
-      }),
-    });
-    if (res.ok) {
-      setSelectedProduct(''); setQuantity('1'); setSalePrice('');
-      fetchData();
-    } else {
-      const data = await res.json();
-      setError(data.error || 'فشلت العملية');
+      }, {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      if (res.status === 201) {
+        setSelectedProduct(''); setQuantity('1'); setSalePrice('');
+        loadSalesData();
+      }
+    } catch (err: any) {
+      console.error('Sale error:', err);
+      if (err.response) {
+        setError(err.response.data.error || 'فشلت العملية');
+      } else {
+        setError('فشلت العملية');
+      }
     }
   };
 
@@ -627,14 +642,18 @@ const Reports = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
-    fetchSales();
+    loadReportsData();
   }, []);
 
-  const fetchSales = async () => {
-    const res = await fetch('/api/sales', {
-      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-    });
-    if (res.ok) setSales(await res.json());
+  const loadReportsData = async () => {
+    try {
+      const res = await axios.get('/api/sales', {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      setSales(res.data);
+    } catch (err) {
+      console.error('Reports data error:', err);
+    }
   };
 
   const filteredSales = sales.filter(sale => {

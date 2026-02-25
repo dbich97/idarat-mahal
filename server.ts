@@ -5,10 +5,12 @@ import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import cors from "cors";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database("store.db");
 
+console.log("Initializing database...");
 // Initialize Database
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -42,9 +44,21 @@ db.exec(`
 `);
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 const JWT_SECRET = "your-secret-key"; // In a real app, use process.env.JWT_SECRET
+
+// Ping endpoint
+app.get("/api/ping", (req, res) => {
+  res.json({ status: "ok", time: new Date().toISOString() });
+});
 
 // Auth Middleware
 const authenticateToken = (req: any, res: any, next: any) => {
@@ -62,24 +76,38 @@ const authenticateToken = (req: any, res: any, next: any) => {
 
 // Auth Routes
 app.post("/api/register", async (req, res) => {
+  console.log("Register request received:", req.body.username);
   const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password are required" });
+  }
   const hashedPassword = await bcrypt.hash(password, 10);
   try {
     const info = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hashedPassword);
+    console.log("User registered successfully:", username);
     res.status(201).json({ id: info.lastInsertRowid });
-  } catch (e) {
+  } catch (e: any) {
+    console.error("Registration error:", e.message);
     res.status(400).json({ error: "Username already exists" });
   }
 });
 
 app.post("/api/login", async (req, res) => {
+  console.log("Login request received:", req.body.username);
   const { username, password } = req.body;
-  const user: any = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
-  if (user && await bcrypt.compare(password, user.password)) {
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
-    res.json({ token, username: user.username });
-  } else {
-    res.status(401).json({ error: "Invalid credentials" });
+  try {
+    const user: any = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+    if (user && await bcrypt.compare(password, user.password)) {
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+      console.log("Login successful:", username);
+      res.json({ token, username: user.username });
+    } else {
+      console.log("Login failed: Invalid credentials for", username);
+      res.status(401).json({ error: "Invalid credentials" });
+    }
+  } catch (e: any) {
+    console.error("Login error:", e.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
