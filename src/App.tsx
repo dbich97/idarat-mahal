@@ -74,6 +74,10 @@ const Navbar = ({ onLogout }: { onLogout: () => void }) => {
           <FileText size={20} />
           <span>التقارير</span>
         </Link>
+        <Link to="/profile" className="flex items-center gap-2 text-slate-600 hover:text-indigo-600 transition-colors">
+          <UserIcon size={20} />
+          <span>حسابي</span>
+        </Link>
         <button 
           onClick={onLogout}
           className="flex items-center gap-2 text-red-500 hover:text-red-600 transition-colors mr-4"
@@ -89,6 +93,8 @@ const Navbar = ({ onLogout }: { onLogout: () => void }) => {
 const Login = ({ setToken }: { setToken: (t: string) => void }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -101,7 +107,11 @@ const Login = ({ setToken }: { setToken: (t: string) => void }) => {
     
     const endpoint = isRegister ? '/api/register' : '/api/login';
     try {
-      const res = await axios.post(endpoint, { username, password });
+      const payload = isRegister 
+        ? { username, password, full_name: fullName, email }
+        : { username, password };
+        
+      const res = await axios.post(endpoint, payload);
       const data = res.data;
       
       if (res.status === 200 || res.status === 201) {
@@ -147,6 +157,30 @@ const Login = ({ setToken }: { setToken: (t: string) => void }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isRegister && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">الاسم الكامل</label>
+                <input 
+                  type="text" 
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                  placeholder="أدخل اسمك الكامل"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">البريد الإلكتروني</label>
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                  placeholder="example@mail.com"
+                />
+              </div>
+            </>
+          )}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">اسم المستخدم</label>
             <input 
@@ -759,6 +793,116 @@ const Reports = () => {
   );
 };
 
+const Profile = () => {
+  const [profile, setProfile] = useState({ username: '', full_name: '', email: '' });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const res = await axios.get('/api/profile', {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      setProfile(res.data);
+    } catch (err) {
+      console.error('Profile load error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setMessage('');
+    try {
+      await axios.put('/api/profile', profile, {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      setMessage('تم تحديث البيانات بنجاح');
+    } catch (err) {
+      console.error('Profile update error:', err);
+      setMessage('فشل تحديث البيانات');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) return <div className="p-6 text-center">جاري التحميل...</div>;
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-slate-800">الملف الشخصي</h1>
+        <p className="text-slate-500">معلومات حسابك المسجلة في النظام</p>
+      </header>
+
+      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <form onSubmit={handleUpdate} className="space-y-6">
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl mb-6">
+            <div className="bg-indigo-100 p-3 rounded-full text-indigo-600">
+              <UserIcon size={24} />
+            </div>
+            <div>
+              <div className="text-sm text-slate-500">اسم المستخدم (لا يمكن تغييره)</div>
+              <div className="font-bold text-slate-800">{profile.username}</div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">الاسم الكامل</label>
+            <input 
+              type="text" 
+              value={profile.full_name || ''}
+              onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">البريد الإلكتروني</label>
+            <input 
+              type="email" 
+              value={profile.email || ''}
+              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+
+          {message && (
+            <div className={`p-4 rounded-xl text-sm font-medium ${message.includes('نجاح') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+              {message}
+            </div>
+          )}
+
+          <button 
+            type="submit"
+            disabled={isSaving}
+            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg active:scale-95 disabled:bg-slate-400"
+          >
+            {isSaving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+          </button>
+        </form>
+      </div>
+      
+      <div className="mt-8 p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
+        <h3 className="font-bold text-indigo-800 mb-2 flex items-center gap-2">
+          <AlertCircle size={18} />
+          حول بياناتك
+        </h3>
+        <p className="text-indigo-700 text-sm leading-relaxed">
+          جميع المعلومات التي تدخلها هنا وفي أقسام المخزون والمبيعات يتم حفظها بشكل آمن في قاعدة بيانات المتجر الخاصة بك. يمكنك الوصول إليها في أي وقت ومن أي جهاز بمجرد تسجيل الدخول.
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // --- Main App ---
 
 export default function App() {
@@ -781,6 +925,7 @@ export default function App() {
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/sales" element={<Sales />} />
                 <Route path="/reports" element={<Reports />} />
+                <Route path="/profile" element={<Profile />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>
             </main>

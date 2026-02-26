@@ -16,7 +16,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
-    password TEXT
+    password TEXT,
+    full_name TEXT,
+    email TEXT
   );
 
   CREATE TABLE IF NOT EXISTS products (
@@ -77,11 +79,13 @@ const authenticateToken = (req: any, res: any, next: any) => {
 // Auth Routes
 app.post("/api/register", async (req, res) => {
   try {
-    let { username, password } = req.body;
+    let { username, password, full_name, email } = req.body;
     
     // 1. Sanitization & Validation
     username = username?.toString().trim();
     password = password?.toString();
+    full_name = full_name?.toString().trim();
+    email = email?.toString().trim();
 
     if (!username || !password) {
       return res.status(400).json({ error: "اسم المستخدم وكلمة المرور مطلوبان" });
@@ -102,7 +106,7 @@ app.post("/api/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     // 2. Database Operation
-    const info = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hashedPassword);
+    const info = db.prepare("INSERT INTO users (username, password, full_name, email) VALUES (?, ?, ?, ?)").run(username, hashedPassword, full_name || null, email || null);
     
     console.log(`User registered successfully: ${username} (ID: ${info.lastInsertRowid})`);
     return res.status(201).json({ 
@@ -146,6 +150,22 @@ app.post("/api/login", async (req, res) => {
     console.error("Login error:", e.message);
     res.status(500).json({ error: "حدث خطأ في الخادم أثناء تسجيل الدخول" });
   }
+});
+
+// Profile Routes
+app.get("/api/profile", authenticateToken, (req: any, res) => {
+  const user: any = db.prepare("SELECT id, username, full_name, email FROM users WHERE id = ?").get(req.user.id);
+  if (user) {
+    res.json(user);
+  } else {
+    res.status(404).json({ error: "المستخدم غير موجود" });
+  }
+});
+
+app.put("/api/profile", authenticateToken, (req: any, res) => {
+  const { full_name, email } = req.body;
+  db.prepare("UPDATE users SET full_name = ?, email = ? WHERE id = ?").run(full_name, email, req.user.id);
+  res.json({ success: true, message: "تم تحديث الملف الشخصي بنجاح" });
 });
 
 // Product Routes
